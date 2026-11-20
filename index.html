@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<title>تحليل الأسطح الشمسية - GIS</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css" />
+<style>
+  body { margin: 0; font-family: Tahoma, sans-serif; display: flex; height: 100vh; background: #f1f5f9; }
+  #sidebar { width: 340px; background: #fff; padding: 16px; box-shadow: 2px 0 8px rgba(0,0,0,0.1); overflow-y: auto; z-index: 1000; }
+  #map { flex: 1; height: 100%; }
+  h2 { font-size: 17px; color: #0f4c81; margin-top: 0; }
+  .box { background: #f8fafc; border-right: 4px solid #f59e0b; padding: 10px; border-radius: 6px; margin-bottom: 10px; }
+  .box span { font-size: 12px; color: #64748b; display: block; }
+  .box strong { font-size: 16px; color: #0f172a; }
+  label { font-size: 12px; font-weight: bold; display: block; margin-top: 8px; }
+  input, select { width: 100%; padding: 6px; margin-top: 4px; border: 1px solid #cbd5e1; border-radius: 5px; box-sizing: border-box; }
+  button { width: 100%; padding: 10px; margin-top: 12px; background: #10b981; color: #fff; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; }
+</style>
+</head>
+<body>
+
+<div id="sidebar">
+  <h2>حاسبة الألواح الشمسية (GIS)</h2>
+  <p style="font-size:12px; color:#475569;">ارسم شكل سطح المبنى باستخدام أداة المضلع (⬟) على الخريطة.</p>
+
+  <label>نسبة المساحة الصالحة (خصم المناور والظلال %):</label>
+  <input type="number" id="usablePct" value="75" min="10" max="100" onchange="calc()">
+
+  <div class="box" style="margin-top:12px;">
+    <span>المساحة الكلية للسطح</span>
+    <strong id="areaOut">0 م²</strong>
+  </div>
+  <div class="box">
+    <span>المساحة الصالحة للتركيب</span>
+    <strong id="netOut">0 م²</strong>
+  </div>
+  <div class="box" style="border-color:#0f4c81;">
+    <span>عدد الألواح المتوقع (550W)</span>
+    <strong id="panelsOut">0 لوح</strong>
+  </div>
+  <div class="box" style="border-color:#10b981;">
+    <span>القدرة الكلية</span>
+    <strong id="kwOut">0 kWp</strong>
+  </div>
+
+  <button onclick="downloadGeoJSON()">تحميل ملف GeoJSON لـ ArcGIS</button>
+</div>
+
+<div id="map"></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
+<script>
+  const map = L.map('map').setView([30.0444, 31.2357], 17);
+  L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}').addTo(map);
+  L.tileLayer('https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}').addTo(map);
+
+  const drawnItems = new L.FeatureGroup();
+  map.addLayer(drawnItems);
+
+  const drawControl = new L.Control.Draw({
+    edit: { featureGroup: drawnItems },
+    draw: { polygon: { showArea: true }, rectangle: true, polyline: false, circle: false, marker: false, circlemarker: false }
+  });
+  map.addControl(drawControl);
+
+  let currentLayer = null;
+  let lastGeoJSON = null;
+
+  map.on(L.Draw.Event.CREATED, function (e) {
+    drawnItems.clearLayers();
+    currentLayer = e.layer;
+    drawnItems.addLayer(currentLayer);
+    calc();
+  });
+
+  map.on(L.Draw.Event.EDITED, calc);
+
+  function calc() {
+    if (!currentLayer) return;
+    const gj = currentLayer.toGeoJSON();
+    const area = turf.area(gj);
+    const ratio = parseFloat(document.getElementById('usablePct').value) / 100;
+    const netArea = area * ratio;
+    const panels = Math.floor(netArea / 2.57);
+    const kwp = (panels * 550) / 1000;
+
+    document.getElementById('areaOut').innerText = area.toFixed(2) + " م²";
+    document.getElementById('netOut').innerText = netArea.toFixed(2) + " م²";
+    document.getElementById('panelsOut').innerText = panels + " لوح";
+    document.getElementById('kwOut').innerText = kwp.toFixed(2) + " kWp";gj.properties = { Area_SqM: Number(area.toFixed(2)), Usable_Area: Number(netArea.toFixed(2)), Panels: panels, kWp: Number(kwp.toFixed(2)) };
+    lastGeoJSON = gj;
+  }
+
+  function downloadGeoJSON() {
+    if (!lastGeoJSON) { alert("ارسم مبنى على الخريطة أولاً"); return; }
+    const blob = new Blob([JSON.stringify(lastGeoJSON, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "building_solar.geojson";
+    a.click();
+  }
+</script>
+</body>
+</html>
