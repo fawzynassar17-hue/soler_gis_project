@@ -2,105 +2,1383 @@
 <html lang="ar" dir="rtl">
 <head>
 <meta charset="UTF-8">
-<title>تحليل الأسطح الشمسية - GIS</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>تحليل الأسطح الشمسية 3D - Web GIS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css" />
 <style>
-  body { margin: 0; font-family: Tahoma, sans-serif; display: flex; height: 100vh; background: #f1f5f9; }
-  #sidebar { width: 340px; background: #fff; padding: 16px; box-shadow: 2px 0 8px rgba(0,0,0,0.1); overflow-y: auto; z-index: 1000; }
-  #map { flex: 1; height: 100%; }
-  h2 { font-size: 17px; color: #0f4c81; margin-top: 0; }
-  .box { background: #f8fafc; border-right: 4px solid #f59e0b; padding: 10px; border-radius: 6px; margin-bottom: 10px; }
-  .box span { font-size: 12px; color: #64748b; display: block; }
-  .box strong { font-size: 16px; color: #0f172a; }
-  label { font-size: 12px; font-weight: bold; display: block; margin-top: 8px; }
-  input, select { width: 100%; padding: 6px; margin-top: 4px; border: 1px solid #cbd5e1; border-radius: 5px; box-sizing: border-box; }
-  button { width: 100%; padding: 10px; margin-top: 12px; background: #10b981; color: #fff; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; }
+  :root {
+    --primary: #0f4c81;
+    --primary-dark: #093256;
+    --accent: #f59e0b;
+    --success: #10b981;
+    --danger: #ef4444;
+    --bg: #eef2f6;
+    --card: #ffffff;
+    --text: #0f172a;
+    --muted: #64748b;
+    --border: #e2e8f0;
+  }
+
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; width: 100%; height: 100%;
+    font-family: 'Cairo', Tahoma, sans-serif; background: var(--bg); color: var(--text);
+  }
+
+  .app {
+    display: flex;
+    flex-direction: row;
+    width: 100%;
+    height: 100vh;
+    overflow: hidden;
+  }
+
+  #sidebar {
+    width: 395px;
+    min-width: 325px;
+    max-width: 45vw;
+    height: 100vh;
+    background: var(--card);
+    padding: 14px 16px;
+    overflow-y: auto;
+    z-index: 1000;
+    border-left: 2px solid #cbd5e1;
+    box-shadow: -4px 0 18px rgba(15, 23, 42, 0.08);
+  }
+
+  #viewport {
+    flex: 1;
+    height: 100vh;
+    position: relative;
+    background: #dbeafe;
+  }
+
+  #map, #view3d {
+    width: 100%;
+    height: 100%;
+    position: absolute;
+    inset: 0;
+  }
+
+  #view3d {
+    display: none;
+    background: linear-gradient(180deg, #38bdf8 0%, #bae6fd 58%, #e2e8f0 100%);
+  }
+
+  .view-switcher {
+    position: absolute;
+    top: 12px;
+    left: 12px;
+    z-index: 1200;
+    display: flex;
+    gap: 6px;
+    background: rgba(15, 23, 42, 0.88);
+    padding: 5px;
+    border-radius: 9px;
+    backdrop-filter: blur(4px);
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+  }
+
+  .view-tab {
+    border: none;
+    padding: 6px 13px;
+    border-radius: 6px;
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    color: #e2e8f0;
+    background: transparent;
+    transition: 0.2s;
+  }
+
+  .view-tab.active {
+    background: var(--accent);
+    color: #0f172a;
+  }
+
+  #hint3d {
+    position: absolute;
+    bottom: 12px;
+    right: 12px;
+    z-index: 1200;
+    background: rgba(15, 23, 42, 0.84);
+    color: #f8fafc;
+    padding: 6px 12px;
+    border-radius: 7px;
+    font-size: 11.5px;
+    pointer-events: none;
+  }
+
+  @media (max-width: 768px) {
+    .app { flex-direction: column; overflow: auto; }
+    #sidebar { width: 100%; max-width: 100%; height: auto; border-left: none; border-bottom: 2px solid #cbd5e1; }
+    #viewport { width: 100%; height: 65vh; }
+  }
+
+  .header-card {
+    padding-bottom: 10px; margin-bottom: 10px; border-bottom: 1px solid var(--border);
+  }
+  .brand-title { margin: 0; font-size: 17px; font-weight: 800; color: var(--primary); }
+  .brand-sub { font-size: 11px; color: var(--muted); display: block; margin-top: 2px; }
+
+  label {
+    font-size: 12px; font-weight: 700; display: block;
+    margin-top: 9px; margin-bottom: 4px; color: #1e293b;
+  }
+  input, select {
+    width: 100%; padding: 7px 9px; border: 1px solid #cbd5e1;
+    border-radius: 7px; font-family: inherit; font-size: 12.5px;
+    background: #fff; color: var(--text); transition: border-color 0.2s, box-shadow 0.2s;
+  }
+  input[type="color"] {
+    padding: 2px 4px;
+    height: 34px;
+    cursor: pointer;
+  }
+  input:focus, select:focus {
+    outline: none; border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(15, 76, 129, 0.12);
+  }
+
+  .search-wrapper { position: relative; }
+  .search-box { display: flex; gap: 6px; align-items: stretch; }
+  .search-box input { flex: 1; }
+  .search-box button {
+    width: auto; margin: 0; padding: 0 12px; border: none; border-radius: 7px;
+    font-family: inherit; font-size: 12px; font-weight: 700; color: #fff;
+    background: var(--primary); cursor: pointer; white-space: nowrap; transition: 0.2s;
+  }
+  .search-box button:hover { background: var(--primary-dark); }
+  .gmaps-btn { background: #2563eb !important; }
+  .gmaps-btn:hover { background: #1d4ed8 !important; }
+
+  #suggestions {
+    position: absolute; top: calc(100% + 4px); right: 0; left: 0;
+    background: #fff; border: 1px solid #cbd5e1; border-radius: 8px;
+    box-shadow: 0 10px 25px rgba(15, 23, 42, 0.16); max-height: 235px;
+    overflow-y: auto; z-index: 2500; display: none;
+  }
+  .suggestion-item {
+    padding: 9px 11px; font-size: 12px; cursor: pointer;
+    border-bottom: 1px solid #f1f5f9; line-height: 1.45; transition: background 0.15s;
+  }
+  .suggestion-item:last-child { border-bottom: none; }
+  .suggestion-item:hover { background: #eff6ff; color: var(--primary); }
+  .suggestion-sub {
+    font-size: 10.5px; color: var(--muted); display: block;
+    margin-top: 2px; direction: ltr; text-align: left;
+  }
+  .badge-local {
+    display: inline-block; background: #fef3c7; color: #92400e;
+    font-size: 10px; padding: 1px 6px; border-radius: 5px;
+    margin-left: 6px; font-weight: 700;
+  }
+  #searchStatus { font-size: 11px; color: var(--primary); min-height: 16px; margin-top: 4px; font-weight: 600; }
+
+  .draw-tools-bar {
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    background: #fffbeb; border: 1px solid #fde68a; border-radius: 8px;
+    padding: 8px 10px; margin-top: 6px;
+  }
+  #leafletDrawHost { display: flex; align-items: center; }
+  #leafletDrawHost .leaflet-draw { margin-top: 0; margin-left: 0; }
+  #leafletDrawHost .leaflet-draw-toolbar {
+    display: flex; flex-direction: row; border: none; box-shadow: none; background: transparent;
+  }
+  #leafletDrawHost .leaflet-bar a {
+    float: none; border-radius: 5px; margin-left: 4px; border: 1px solid #cbd5e1;
+  }
+  .cut-btn {
+    width: auto; margin: 0; padding: 6px 12px; font-size: 12px; font-weight: 700;
+    background: #d97706; color: #fff; border: none; border-radius: 6px;
+    cursor: pointer; font-family: inherit; transition: 0.2s;
+  }
+  .cut-btn:hover { background: #b45309; }
+  .cut-btn.active { background: #dc2626; }
+  #cutStatus { font-size: 11px; color: #78350f; width: 100%; margin-top: 2px; }
+
+  .controls-row { display: grid; grid-template-columns: 1fr 1.35fr 0.85fr; gap: 8px; margin-top: 4px; }
+  .controls-row-3d { display: grid; grid-template-columns: 1fr 1fr 1fr 0.7fr; gap: 6px; margin-top: 4px; }
+
+  .metric-card {
+    background: #f8fafc; border: 1px solid var(--border);
+    border-right: 4px solid var(--accent); padding: 8px 11px;
+    border-radius: 8px; margin-top: 8px;
+  }
+  .metric-card span { font-size: 11.5px; color: var(--muted); display: block; font-weight: 600; }
+  .metric-card strong { font-size: 14px; color: var(--text); font-weight: 800; }
+
+  .prod-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
+  .prod-card {
+    background: #ecfdf5; border: 1px solid #a7f3d0;
+    border-right: 4px solid var(--success); padding: 8px 10px; border-radius: 8px;
+  }
+  .prod-card span { font-size: 11px; color: #047857; display: block; font-weight: 700; }
+  .prod-card strong { font-size: 13.5px; color: #064e3b; font-weight: 800; }
+
+  #shapesList {
+    margin-top: 6px; max-height: 115px; overflow-y: auto;
+    border: 1px solid var(--border); border-radius: 8px;
+    padding: 6px; background: #f8fafc; font-size: 11.5px;
+  }
+  .shape-item {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 5px 6px; border-bottom: 1px dashed #e2e8f0;
+  }
+  .shape-item:last-child { border-bottom: none; }
+  .shape-zoom {
+    background: #e0f2fe; color: #0369a1; border: none; border-radius: 5px;
+    padding: 3px 8px; cursor: pointer; font-size: 11px; font-weight: 700; font-family: inherit;
+  }
+  .shape-zoom:hover { background: #bae6fd; }
+
+  .btn-row { display: flex; gap: 7px; margin-top: 10px; }
+  .export-btn {
+    flex: 1; padding: 9px; background: var(--success); color: #fff;
+    border: none; border-radius: 7px; font-weight: 700; font-size: 12.5px;
+    cursor: pointer; font-family: inherit; transition: 0.2s;
+  }
+  .export-btn:hover { background: #059669; }
+  .btn-clear {
+    padding: 9px 13px; background: var(--danger); color: #fff;
+    border: none; border-radius: 7px; font-weight: 700; font-size: 12px;
+    cursor: pointer; font-family: inherit; transition: 0.2s;
+  }
+  .btn-clear:hover { background: #dc2626; }
+
+  #coordsBar {
+    position: absolute; bottom: 8px; left: 10px; z-index: 1000;
+    background: rgba(15, 23, 42, 0.88); color: #f8fafc; padding: 5px 11px;
+    border-radius: 6px; font-size: 11px; direction: ltr; pointer-events: none;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+  }
 </style>
 </head>
 <body>
+<div class="app" id="appRoot">
+  <div id="sidebar">
+    <div class="header-card">
+      <h1 class="brand-title">حاسبة الألواح الشمسية 3D (Web GIS)</h1>
+      <span class="brand-sub">تحليل المساحات، قص المناور، الإنتاج الشمسي، ومعاينة 3D معمارية</span>
+    </div>
 
-<div id="sidebar">
-  <h2>حاسبة الألواح الشمسية (GIS)</h2>
-  <p style="font-size:12px; color:#475569;">ارسم شكل سطح المبنى باستخدام أداة المضلع (⬟) على الخريطة.</p>
+    <label>بحث خرائطي (كليات، جامعات، مدن، شوارع، إحداثيات):</label>
+    <div class="search-wrapper">
+      <div class="search-box">
+        <input type="text" id="searchInput" placeholder="مثال: اداب بنها أو كلية الآداب جامعة بنها..." oninput="onSearchInput()" onkeydown="if(event.key==='Enter'){event.preventDefault();searchLocation();}">
+        <button type="button" onclick="searchLocation()">بحث</button>
+        <button type="button" class="gmaps-btn" onclick="openInGoogleMaps()" title="فتح في خرائط جوجل">Google Maps</button>
+      </div>
+      <div id="suggestions"></div>
+    </div>
+    <div id="searchStatus"></div>
 
-  <label>نسبة المساحة الصالحة (خصم المناور والظلال %):</label>
-  <input type="number" id="usablePct" value="75" min="10" max="100" onchange="calc()">
+    <label>أدوات الرسم والقص:</label>
+    <div class="draw-tools-bar">
+      <div id="leafletDrawHost"></div>
+      <button type="button" class="cut-btn" id="cutBtn" onclick="toggleCutMode()">قص مساحة من السطح</button>
+      <span id="cutStatus">ارسم السطح في وضع الخريطة 2D، ثم انتقل إلى "معاينة 3D" لرؤية المبنى والألواح.</span>
+    </div>
 
-  <div class="box" style="margin-top:12px;">
-    <span>المساحة الكلية للسطح</span>
-    <strong id="areaOut">0 م²</strong>
-  </div>
-  <div class="box">
-    <span>المساحة الصالحة للتركيب</span>
-    <strong id="netOut">0 م²</strong>
-  </div>
-  <div class="box" style="border-color:#0f4c81;">
-    <span>عدد الألواح المتوقع (550W)</span>
-    <strong id="panelsOut">0 لوح</strong>
-  </div>
-  <div class="box" style="border-color:#10b981;">
-    <span>القدرة الكلية</span>
-    <strong id="kwOut">0 kWp</strong>
+    <div class="controls-row">
+      <div>
+        <label>الاستغلال (%):</label>
+        <input type="number" id="usablePct" value="75" min="10" max="100" onchange="recalcAll()">
+      </div>
+      <div>
+        <label>الإشعاع الشمسي (PSH):</label>
+        <select id="pshSelect" onchange="recalcAll()">
+          <option value="5.4">القاهرة والدلتا (5.4 س/يوم)</option>
+          <option value="6.1">صعيد مصر وأسوان (6.1 س/يوم)</option>
+          <option value="5.7">الإسكندرية والساحل (5.7 س/يوم)</option>
+          <option value="5.8">سيناء والبحر الأحمر (5.8 س/يوم)</option>
+          <option value="5.9">الرياض والخليج (5.9 س/يوم)</option>
+        </select>
+      </div>
+      <div>
+        <label>معامل الأداء:</label>
+        <input type="number" id="prInput" value="0.78" step="0.01" min="0.5" max="0.95" onchange="recalcAll()">
+      </div>
+    </div>
+
+    <div class="controls-row-3d">
+      <div>
+        <label>الأدوار:</label>
+        <input type="number" id="floorsCount" value="4" min="1" max="40" step="1" onchange="syncHeightFromFloors()">
+      </div>
+      <div>
+        <label>الارتفاع (م):</label>
+        <input type="number" id="buildingHeight" value="13" min="3" max="150" step="0.5" onchange="rebuild3DScene()">
+      </div>
+      <div>
+        <label>الميل (°):</label>
+        <input type="number" id="panelTilt" value="25" min="5" max="45" step="1" onchange="rebuild3DScene()">
+      </div>
+      <div>
+        <label>اللون:</label>
+        <input type="color" id="buildingColor" value="#e2e8f0" oninput="rebuild3DScene()" onchange="rebuild3DScene()">
+      </div>
+    </div>
+
+    <div class="metric-card">
+      <span>المساحة الكلية / المقتطعة (مناور)</span>
+      <strong id="areaOut">0 سطح | 0.00 م² (مقتطع: 0.00 م²)</strong>
+    </div>
+    <div class="metric-card">
+      <span>المساحة الصافية للتركيب</span>
+      <strong id="netOut">0.00 م²</strong>
+    </div>
+    <div class="metric-card" style="border-right-color: var(--primary);">
+      <span>إجمالي الألواح والقدرة (550W)</span>
+      <strong id="panelsOut">0 لوح | 0.00 kWp</strong>
+    </div>
+
+    <div class="prod-grid">
+      <div class="prod-card">
+        <span>الإنتاج الشهري المتوقع</span>
+        <strong id="monthlyOut">0 kWh</strong>
+      </div>
+      <div class="prod-card">
+        <span>الإنتاج السنوي المتوقع</span>
+        <strong id="annualOut">0 kWh</strong>
+      </div>
+    </div>
+
+    <label>الأسطح والفراغات المرسومة:</label>
+    <div id="shapesList"><span style="color:#94a3b8;">لم يتم رسم أي شكل بعد.</span></div>
+
+    <div class="btn-row">
+      <button type="button" class="export-btn" onclick="downloadGeoJSON()">تصدير GeoJSON</button>
+      <button type="button" class="btn-clear" onclick="clearAllShapes()">مسح الكل</button>
+    </div>
   </div>
 
-  <button onclick="downloadGeoJSON()">تحميل ملف GeoJSON لـ ArcGIS</button>
+  <div id="viewport">
+    <div class="view-switcher">
+      <button type="button" class="view-tab active" id="tab2D" onclick="switchView('2d')">خريطة 2D</button>
+      <button type="button" class="view-tab" id="tab3D" onclick="switchView('3d')">معاينة 3D</button>
+    </div>
+
+    <div id="map">
+      <div id="coordsBar">Lat: 30.47089 | Lon: 31.18786 | Zoom: 20</div>
+    </div>
+
+    <div id="view3d">
+      <div id="hint3d">اسحب للتدوير • عجلة الماوس للتقريب • كليك يمين للتحريك</div>
+    </div>
+  </div>
 </div>
 
-<div id="map"></div>
-
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
+<script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 <script>
-  const map = L.map('map').setView([30.0444, 31.2357], 17);
-  L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}').addTo(map);
-  L.tileLayer('https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}').addTo(map);
+  const LOCAL_FACULTIES = [
+    { name: "كلية الآداب - جامعة بنها", lat: 30.470889, lon: 31.187861, psh: "5.4", keys: ["اداب", "بنها", "كليه", "جامعه", "arts", "benha", "faculty"] },
+    { name: "كلية الهندسة بشبرا - جامعة بنها", lat: 30.1235, lon: 31.2465, psh: "5.4", keys: ["هندسه", "شبرا", "بنها", "engineering", "shoubra", "benha"] },
+    { name: "كلية العلوم - جامعة بنها", lat: 30.4648, lon: 31.1822, psh: "5.4", keys: ["علوم", "بنها", "science", "benha"] },
+    { name: "كلية التجارة - جامعة بنها", lat: 30.4652, lon: 31.1830, psh: "5.4", keys: ["تجاره", "بنها", "commerce", "benha"] },
+    { name: "جامعة بنها - الحرم الجامعي", lat: 30.4655, lon: 31.1835, psh: "5.4", keys: ["بنها", "جامعه", "benha", "university"] },
+    { name: "كلية الآداب - جامعة القاهرة", lat: 30.0258, lon: 31.2116, psh: "5.4", keys: ["اداب", "القاهره", "cairo", "arts"] },
+    { name: "كلية الهندسة - جامعة القاهرة", lat: 30.0265, lon: 31.2111, psh: "5.4", keys: ["هندسه", "القاهره", "cairo", "engineering"] },
+    { name: "كلية العلوم - جامعة القاهرة", lat: 30.0250, lon: 31.2088, psh: "5.4", keys: ["علوم", "القاهره", "cairo", "science"] },
+    { name: "كلية الحاسبات والذكاء الاصطناعي - جامعة القاهرة", lat: 30.0275, lon: 31.2095, psh: "5.4", keys: ["حاسبات", "القاهره", "cairo", "computers"] },
+    { name: "جامعة القاهرة - الحرم الرئيسي", lat: 30.0273, lon: 31.2086, psh: "5.4", keys: ["القاهره", "جامعه", "cairo", "university"] },
+    { name: "كلية الآداب - جامعة عين شمس", lat: 30.0785, lon: 31.2848, psh: "5.4", keys: ["اداب", "عين", "شمس", "ain", "shams", "arts"] },
+    { name: "كلية الهندسة - جامعة عين شمس", lat: 30.0646, lon: 31.2788, psh: "5.4", keys: ["هندسه", "عين", "شمس", "ain", "shams", "engineering"] },
+    { name: "جامعة عين شمس - الحرم الرئيسي", lat: 30.0771, lon: 31.2859, psh: "5.4", keys: ["عين", "شمس", "ain", "shams"] },
+    { name: "كلية الآداب - جامعة الإسكندرية", lat: 31.2015, lon: 29.9195, psh: "5.7", keys: ["اداب", "الاسكندريه", "alexandria", "arts"] },
+    { name: "جامعة الإسكندرية - الشاطبي", lat: 31.2001, lon: 29.9187, psh: "5.7", keys: ["الاسكندريه", "alexandria"] },
+    { name: "كلية الآداب - جامعة المنصورة", lat: 31.0418, lon: 31.3535, psh: "5.4", keys: ["اداب", "المنصوره", "mansoura", "arts"] },
+    { name: "جامعة المنصورة - الحرم الجامعي", lat: 31.0425, lon: 31.3522, psh: "5.4", keys: ["المنصوره", "mansoura"] },
+    { name: "كلية الآداب - جامعة أسيوط", lat: 27.1875, lon: 31.1702, psh: "6.1", keys: ["اداب", "اسيوط", "assiut", "arts"] },
+    { name: "جامعة أسيوط - الحرم الجامعي", lat: 27.1869, lon: 31.1695, psh: "6.1", keys: ["اسيوط", "assiut"] },
+    { name: "جامعة الأزهر - مدينة نصر", lat: 30.0736, lon: 31.3456, psh: "5.4", keys: ["الازهر", "al", "azhar"] },
+    { name: "جامعة طنطا - الكليات", lat: 30.7934, lon: 31.0005, psh: "5.4", keys: ["طنطا", "tanta"] },
+    { name: "جامعة الزقازيق - الحرم الجامعي", lat: 30.5965, lon: 31.4998, psh: "5.4", keys: ["الزقازيق", "zagazig"] },
+    { name: "جامعة حلوان - الحرم الجامعي", lat: 29.8669, lon: 31.3150, psh: "5.4", keys: ["حلوان", "helwan"] },
+    { name: "جامعة المنوفية - شبين الكوم", lat: 30.5594, lon: 31.0118, psh: "5.4", keys: ["المنوفيه", "menoufia"] }
+  ];
+
+  function normalizeArabic(str) {
+    return (str || '')
+      .toLowerCase()
+      .replace(/[أإآا]/g, 'ا')
+      .replace(/ى/g, 'ي')
+      .replace(/ة/g, 'ه')
+      .replace(/ؤ/g, 'و')
+      .replace(/ئ/g, 'ي')
+      .replace(/[^\w\u0600-\u06FF\s]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  const map = L.map('map', { maxZoom: 22, zoomSnap: 0.5 }).setView([30.470889, 31.187861], 20);
+
+  const googleSatPure = L.tileLayer('https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', {
+    maxNativeZoom: 21, maxZoom: 22, detectRetina: true, attribution: 'Google Satellite HD'
+  }).addTo(map);
+
+  const googleHybrid = L.tileLayer('https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', {
+    maxNativeZoom: 21, maxZoom: 22, detectRetina: true, attribution: 'Google Hybrid HD'
+  });
+
+  const esriSat = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+    maxNativeZoom: 19, maxZoom: 22, attribution: 'Esri World Imagery'
+  });
+
+  L.control.layers({
+    "قمر صناعي عالي الدقة (Google Sat HD)": googleSatPure,
+    "قمر صناعي + أسماء (Google Hybrid HD)": googleHybrid,
+    "قمر صناعي (Esri World Imagery)": esriSat
+  }, null, { position: 'topright' }).addTo(map);
+
+  L.control.scale({ metric: true, imperial: false, position: 'bottomright' }).addTo(map);
+
+  const coordsBar = document.getElementById('coordsBar');
+  function updateCoordsBar(latlng) {
+    const pt = latlng || map.getCenter();
+    coordsBar.innerText = `Lat: ${pt.lat.toFixed(5)} | Lon: ${pt.lng.toFixed(5)} | Zoom: ${map.getZoom()}`;
+  }
+  map.on('mousemove', e => updateCoordsBar(e.latlng));
+  map.on('zoomend moveend', () => updateCoordsBar());
 
   const drawnItems = new L.FeatureGroup();
   map.addLayer(drawnItems);
 
+  const SURFACE_COLOR = '#f59e0b';
+  let cutModeActive = false;
+
   const drawControl = new L.Control.Draw({
-    edit: { featureGroup: drawnItems },
-    draw: { polygon: { showArea: true }, rectangle: true, polyline: false, circle: false, marker: false, circlemarker: false }
+    position: 'topleft',
+    edit: { featureGroup: drawnItems, remove: true },
+    draw: {
+      polygon: { allowIntersection: false, showArea: true, shapeOptions: { color: SURFACE_COLOR, fillColor: SURFACE_COLOR, fillOpacity: 0.25, weight: 2.5 } },
+      rectangle: { shapeOptions: { color: SURFACE_COLOR, fillColor: SURFACE_COLOR, fillOpacity: 0.25, weight: 2.5 } },
+      polyline: { shapeOptions: { color: '#38bdf8', weight: 3 } },
+      circle: false, marker: false, circlemarker: false
+    }
   });
   map.addControl(drawControl);
+  document.getElementById('leafletDrawHost').appendChild(drawControl.getContainer());
 
-  let currentLayer = null;
-  let lastGeoJSON = null;
+  window.toggleCutMode = function() {
+    cutModeActive = !cutModeActive;
+    const btn = document.getElementById('cutBtn');
+    const st = document.getElementById('cutStatus');
+    if (cutModeActive) {
+      btn.classList.add('active');
+      btn.innerText = 'إلغاء القص';
+      st.innerText = 'انقر لتحديد حدود المساحة المراد قصها داخل السطح ثم أغلق الشكل.';
+      new L.Draw.Polygon(map, {
+        allowIntersection: false,
+        showArea: true,
+        shapeOptions: { color: '#dc2626', fillColor: '#ef4444', fillOpacity: 0.45, weight: 2.5, dashArray: '5,5' }
+      }).enable();
+    } else {
+      btn.classList.remove('active');
+      btn.innerText = 'قص مساحة من السطح';
+      st.innerText = 'ارسم السطح في وضع الخريطة 2D، ثم انتقل إلى "معاينة 3D" لرؤية المبنى والألواح.';
+    }
+  };
+
+  window.syncHeightFromFloors = function() {
+    const floors = Math.max(1, parseInt(document.getElementById('floorsCount').value, 10) || 1);
+    const h = Number((floors * 3.2).toFixed(1));
+    document.getElementById('buildingHeight').value = h;
+    rebuild3DScene();
+  };
+
+  let searchMarker = null;
+  let debounceTimer = null;
+  let searchAbortController = null;
+  let layerRefs = [];
 
   map.on(L.Draw.Event.CREATED, function (e) {
-    drawnItems.clearLayers();
-    currentLayer = e.layer;
-    drawnItems.addLayer(currentLayer);
-    calc();
+    const layer = e.layer;
+    if (cutModeActive) {
+      layer.shapeType = 'cutout';
+      layer.setStyle({ color: '#dc2626', fillColor: '#ef4444', fillOpacity: 0.45, weight: 2.5, dashArray: '5,5' });
+      cutModeActive = false;
+      document.getElementById('cutBtn').classList.remove('active');
+      document.getElementById('cutBtn').innerText = 'قص مساحة من السطح';
+      document.getElementById('cutStatus').innerText = 'تم خصم المساحة المقتطعة من الإجمالي.';
+    } else {
+      layer.shapeType = (layer instanceof L.Polyline && !(layer instanceof L.Polygon)) ? 'line' : 'surface';
+    }
+    drawnItems.addLayer(layer);
+    recalcAll();
   });
 
-  map.on(L.Draw.Event.EDITED, calc);
+  map.on(L.Draw.Event.EDITED, recalcAll);
+  map.on(L.Draw.Event.DELETED, recalcAll);
 
-  function calc() {
-    if (!currentLayer) return;
-    const gj = currentLayer.toGeoJSON();
-    const area = turf.area(gj);
-    const ratio = parseFloat(document.getElementById('usablePct').value) / 100;
-    const netArea = area * ratio;
-    const panels = Math.floor(netArea / 2.57);
+  window.zoomToLayerIndex = function(idx) {
+    const target = layerRefs[idx];
+    if (!target) return;
+    switchView('2d');
+    if (target.getBounds) map.fitBounds(target.getBounds().pad(0.35));
+    if (target.openPopup) target.openPopup();
+  };
+
+  function recalcAll() {
+    let surfaceCount = 0;
+    let totalSurfaceArea = 0;
+    let totalCutoutArea = 0;
+    let totalLineMeters = 0;
+    layerRefs = [];
+    let listHtml = '';
+
+    const ratio = (parseFloat(document.getElementById('usablePct').value) || 75) / 100;
+    const psh = parseFloat(document.getElementById('pshSelect').value) || 5.4;
+    const pr = parseFloat(document.getElementById('prInput').value) || 0.78;
+
+    drawnItems.eachLayer(function (layer) {
+      const idx = layerRefs.length;
+      layerRefs.push(layer);
+      const gj = layer.toGeoJSON();
+      const sType = layer.shapeType || (gj.geometry.type === 'LineString' ? 'line' : 'surface');
+
+      if (sType === 'line' || gj.geometry.type === 'LineString') {
+        const lenM = (typeof turf !== 'undefined') ? turf.length(gj, { units: 'kilometers' }) * 1000 : 0;
+        totalLineMeters += lenM;
+        layer.bindPopup(`<b>طول الخط:</b> ${lenM.toFixed(2)} متر`);
+        listHtml += `<div class="shape-item"><span>خط #${idx + 1}: <b>${lenM.toFixed(1)} م</b></span><button type="button" class="shape-zoom" onclick="zoomToLayerIndex(${idx})">انتقال</button></div>`;
+      } else if (sType === 'cutout') {
+        const cutA = (typeof turf !== 'undefined') ? turf.area(gj) : 0;
+        totalCutoutArea += cutA;
+        layer.bindPopup(`<b>مساحة مقتطعة:</b> -${cutA.toFixed(2)} م²`);
+        listHtml += `<div class="shape-item"><span style="color:#b91c1c;">مقتطع: <b>-${cutA.toFixed(1)} م²</b></span><button type="button" class="shape-zoom" onclick="zoomToLayerIndex(${idx})">انتقال</button></div>`;
+      } else {
+        surfaceCount++;
+        const area = (typeof turf !== 'undefined') ? turf.area(gj) : 0;
+        totalSurfaceArea += area;
+        layer.bindPopup(`<b>سطح #${surfaceCount}:</b> ${area.toFixed(2)} م²`);
+        listHtml += `<div class="shape-item"><span>سطح #${surfaceCount}: <b>${area.toFixed(1)} م²</b></span><button type="button" class="shape-zoom" onclick="zoomToLayerIndex(${idx})">انتقال</button></div>`;
+      }
+    });
+
+    const effectiveArea = Math.max(0, totalSurfaceArea - totalCutoutArea);
+    const netUsableArea = effectiveArea * ratio;
+    const panels = Math.floor(netUsableArea / 2.57);
     const kwp = (panels * 550) / 1000;
 
-    document.getElementById('areaOut').innerText = area.toFixed(2) + " م²";
-    document.getElementById('netOut').innerText = netArea.toFixed(2) + " م²";
-    document.getElementById('panelsOut').innerText = panels + " لوح";
-    document.getElementById('kwOut').innerText = kwp.toFixed(2) + " kWp";gj.properties = { Area_SqM: Number(area.toFixed(2)), Usable_Area: Number(netArea.toFixed(2)), Panels: panels, kWp: Number(kwp.toFixed(2)) };
-    lastGeoJSON = gj;
+    const monthlyKwh = kwp * psh * 30 * pr;
+    const annualKwh = kwp * psh * 365 * pr;
+
+    document.getElementById('areaOut').innerText = `${surfaceCount} سطح | ${totalSurfaceArea.toFixed(2)} م² (مقتطع: ${totalCutoutArea.toFixed(2)} م²)`;
+    document.getElementById('netOut').innerText = `${netUsableArea.toFixed(2)} م² (صافي بعد القص: ${effectiveArea.toFixed(2)} م²)`;
+    document.getElementById('panelsOut').innerText = totalLineMeters > 0
+      ? `${panels} لوح | ${kwp.toFixed(2)} kWp | أطوال: ${totalLineMeters.toFixed(1)} م`
+      : `${panels} لوح | ${kwp.toFixed(2)} kWp`;
+
+    document.getElementById('monthlyOut').innerText = `${Math.round(monthlyKwh).toLocaleString()} kWh`;
+    document.getElementById('annualOut').innerText = `${Math.round(annualKwh).toLocaleString()} kWh`;
+    document.getElementById('shapesList').innerHTML = listHtml || '<span style="color:#94a3b8;">لم يتم رسم أي شكل بعد.</span>';
+
+    if (currentView === '3d') rebuild3DScene();
   }
 
+  function clearAllShapes() {
+    drawnItems.clearLayers();
+    recalcAll();
+  }
+
+  // ==================== محرك المعاينة ثلاثية الأبعاد الواقعية (Three.js 3D) ====================
+  let currentView = '2d';
+  let scene3D, camera3D, renderer3D, controls3D, buildingGroup;
+  let initialized3D = false;
+  let cachedTextures = null;
+
+  function createProceduralTextures() {
+    if (cachedTextures) return cachedTextures;
+
+    // 1. ملمس حائط معماري ناعم (Plaster / Architectural Stucco)
+    const wallCanvas = document.createElement('canvas');
+    wallCanvas.width = 256;
+    wallCanvas.height = 256;
+    const wCtx = wallCanvas.getContext('2d');
+    wCtx.fillStyle = '#ffffff';
+    wCtx.fillRect(0, 0, 256, 256);
+    for (let i = 0; i < 4500; i++) {
+      const x = (i * 73) % 256;
+      const y = (i * 137) % 256;
+      const v = 225 + (i % 26);
+      wCtx.fillStyle = `rgba(${v},${v},${v},0.22)`;
+      wCtx.fillRect(x, y, 2, 2);
+    }
+    const wallTex = new THREE.CanvasTexture(wallCanvas);
+    wallTex.wrapS = THREE.RepeatWrapping;
+    wallTex.wrapT = THREE.RepeatWrapping;
+    wallTex.repeat.set(3, 3);
+
+    // 2. ملمس محيط أرضي واقعي (Pavement + Grass/Earth tones)
+    const groundCanvas = document.createElement('canvas');
+    groundCanvas.width = 512;
+    groundCanvas.height = 512;
+    const gCtx = groundCanvas.getContext('2d');
+    gCtx.fillStyle = '#576574';
+    gCtx.fillRect(0, 0, 512, 512);
+    gCtx.fillStyle = '#3b6e4c';
+    gCtx.fillRect(24, 24, 210, 210);
+    gCtx.fillRect(278, 278, 210, 210);
+    gCtx.strokeStyle = 'rgba(226, 232, 240, 0.25)';
+    gCtx.lineWidth = 2;
+    gCtx.strokeRect(12, 12, 488, 488);
+    const groundTex = new THREE.CanvasTexture(groundCanvas);
+    groundTex.wrapS = THREE.RepeatWrapping;
+    groundTex.wrapT = THREE.RepeatWrapping;
+    groundTex.repeat.set(14, 14);
+
+    // 3. ملمس اللوح الشمسي (PV Cell Grid Texture)
+    const pvCanvas = document.createElement('canvas');
+    pvCanvas.width = 256;
+    pvCanvas.height = 128;
+    const pCtx = pvCanvas.getContext('2d');
+    const grad = pCtx.createLinearGradient(0, 0, 256, 128);
+    grad.addColorStop(0, '#0f1f4b');
+    grad.addColorStop(0.5, '#172e6e');
+    grad.addColorStop(1, '#0b1636');
+    pCtx.fillStyle = grad;
+    pCtx.fillRect(0, 0, 256, 128);
+
+    pCtx.strokeStyle = 'rgba(186, 230, 253, 0.28)';
+    pCtx.lineWidth = 1.2;
+    const cols = 12, rows = 6;
+    for (let c = 1; c < cols; c++) {
+      const x = (256 / cols) * c;
+      pCtx.beginPath(); pCtx.moveTo(x, 0); pCtx.lineTo(x, 128); pCtx.stroke();
+    }
+    for (let r = 1; r < rows; r++) {
+      const y = (128 / rows) * r;
+      pCtx.beginPath(); pCtx.moveTo(0, y); pCtx.lineTo(256, y); pCtx.stroke();
+    }
+    const pvTex = new THREE.CanvasTexture(pvCanvas);
+
+    cachedTextures = { wallTex, groundTex, pvTex };
+    return cachedTextures;
+  }
+
+  function init3DEngine() {
+    if (initialized3D) return;
+    const container = document.getElementById('view3d');
+    const w = container.clientWidth || 800;
+    const h = container.clientHeight || 600;
+    const { groundTex } = createProceduralTextures();
+
+    scene3D = new THREE.Scene();
+
+    camera3D = new THREE.PerspectiveCamera(45, w / h, 0.5, 5000);
+    camera3D.position.set(45, 45, 55);
+
+    renderer3D = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer3D.setSize(w, h);
+    renderer3D.setPixelRatio(window.devicePixelRatio || 1);
+    renderer3D.shadowMap.enabled = true;
+    renderer3D.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer3D.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer3D.toneMappingExposure = 1.05;
+    container.appendChild(renderer3D.domElement);
+
+    controls3D = new THREE.OrbitControls(camera3D, renderer3D.domElement);
+    controls3D.enableDamping = true;
+    controls3D.dampingFactor = 0.08;
+    controls3D.maxPolarAngle = Math.PI / 2.02;
+
+    const hemiLight = new THREE.HemisphereLight(0xffffff, 0x475569, 1.0);
+    scene3D.add(hemiLight);
+
+    const sunLight = new THREE.DirectionalLight(0xfffbeb, 1.15);
+    sunLight.position.set(70, 125, 60);
+    sunLight.castShadow = true;
+    sunLight.shadow.mapSize.width = 2048;
+    sunLight.shadow.mapSize.height = 2048;
+    sunLight.shadow.camera.near = 10;
+    sunLight.shadow.camera.far = 350;
+    const dShadow = 85;
+    sunLight.shadow.camera.left = -dShadow;
+    sunLight.shadow.camera.right = dShadow;
+    sunLight.shadow.camera.top = dShadow;
+    sunLight.shadow.camera.bottom = -dShadow;
+    sunLight.shadow.bias = -0.0005;
+    scene3D.add(sunLight);
+
+    const rimLight = new THREE.DirectionalLight(0xbae6fd, 0.35);
+    rimLight.position.set(-60, 45, -50);
+    scene3D.add(rimLight);
+
+    const groundGeo = new THREE.CircleGeometry(260, 72);
+    groundGeo.rotateX(-Math.PI / 2);
+    const groundMat = new THREE.MeshStandardMaterial({ map: groundTex, roughness: 0.9, metalness: 0.04 });
+    const groundMesh = new THREE.Mesh(groundGeo, groundMat);
+    groundMesh.position.y = -0.05;
+    groundMesh.receiveShadow = true;
+    scene3D.add(groundMesh);
+
+    buildingGroup = new THREE.Group();
+    scene3D.add(buildingGroup);
+
+    window.addEventListener('resize', () => {
+      if (!initialized3D) return;
+      const nw = container.clientWidth;
+      const nh = container.clientHeight;
+      if (nw > 0 && nh > 0) {
+        camera3D.aspect = nw / nh;
+        camera3D.updateProjectionMatrix();
+        renderer3D.setSize(nw, nh);
+      }
+    });
+
+    function animate() {
+      requestAnimationFrame(animate);
+      if (currentView === '3d') {
+        controls3D.update();
+        renderer3D.render(scene3D, camera3D);
+      }
+    }
+    animate();
+    initialized3D = true;
+  }
+
+  function pointInPolygon2D(x, z, polyPts) {
+    let inside = false;
+    for (let i = 0, j = polyPts.length - 1; i < polyPts.length; j = i++) {
+      const xi = polyPts[i].x, zi = polyPts[i].z;
+      const xj = polyPts[j].x, zj = polyPts[j].z;
+      const intersect = ((zi > z) !== (zj > z)) && (x < (xj - xi) * (z - zi) / ((zj - zi) || 1e-9) + xi);
+      if (intersect) inside = !inside;
+    }
+    return inside;
+  }
+
+  // يتحقق أن الزوايا الأربع للوح المائل بالكامل تقع داخل حدود المضلع ومسافة أمان من حوافه
+  function isPanelCompletelyInsidePolygon(cx, cz, tiltRad, ptsXZ, marginFromEdge = 0.85) {
+    const halfW = 1.15;
+    const projDepth = (1.16 * Math.cos(tiltRad)) / 2;
+    const corners = [
+      { x: cx - halfW, z: cz - projDepth },
+      { x: cx + halfW, z: cz - projDepth },
+      { x: cx + halfW, z: cz + projDepth },
+      { x: cx - halfW, z: cz + projDepth }
+    ];
+
+    for (const c of corners) {
+      if (!pointInPolygon2D(c.x, c.z, ptsXZ)) return false;
+      // فحص إزاحات صغيرة حول كل زاوية لضمان مسافة أمان عن الحافة
+      const offsets = [
+        { dx: marginFromEdge, dz: 0 },
+        { dx: -marginFromEdge, dz: 0 },
+        { dx: 0, dz: marginFromEdge },
+        { dx: 0, dz: -marginFromEdge }
+      ];
+      for (const off of offsets) {
+        if (!pointInPolygon2D(c.x + off.dx, c.z + off.dz, ptsXZ)) {
+          return false;
+        }
+      }
+    }
+    return true;
+  }
+
+  function createSolarPanelMesh(tiltRad, pvTex) {
+    const group = new THREE.Group();
+
+    const frameGeo = new THREE.BoxGeometry(2.22, 0.055, 1.12);
+    const frameMat = new THREE.MeshStandardMaterial({ color: 0xcbd5e1, metalness: 0.82, roughness: 0.25 });
+    const frame = new THREE.Mesh(frameGeo, frameMat);
+    frame.castShadow = true;
+    frame.receiveShadow = true;
+    group.add(frame);
+
+    const cellGeo = new THREE.BoxGeometry(2.14, 0.065, 1.04);
+    const cellMat = new THREE.MeshStandardMaterial({ map: pvTex, metalness: 0.68, roughness: 0.18 });
+    const cell = new THREE.Mesh(cellGeo, cellMat);
+    cell.position.y = 0.008;
+    group.add(cell);
+
+    const mountMat = new THREE.MeshStandardMaterial({ color: 0x475569, metalness: 0.7, roughness: 0.35 });
+    [-0.72, 0.72].forEach(mx => {
+      const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.026, 0.026, 0.3, 8), mountMat);
+      leg.position.set(mx, -0.15, 0);
+      leg.castShadow = true;
+      group.add(leg);
+    });
+
+    group.rotation.x = tiltRad;
+    return group;
+  }
+
+  function addArchitecturalDetails(ptsXZ, heightM, floorsCount, baseMat, slabMat, windowGlassMat, frameMat, balconyMat, parapetMat) {
+    const floorH = heightM / Math.max(1, floorsCount);
+    const groundFloorH = Math.min(floorH * 1.12, heightM);
+
+    // قاعدة / دور أرضي بارز بملمس أغمق قليلاً كالعمارات والبيوت الحقيقية
+    for (let i = 0; i < ptsXZ.length; i++) {
+      const p1 = ptsXZ[i];
+      const p2 = ptsXZ[(i + 1) % ptsXZ.length];
+      const dx = p2.x - p1.x;
+      const dz = p2.z - p1.z;
+      const segLen = Math.hypot(dx, dz);
+      if (segLen < 0.5) continue;
+
+      const baseBand = new THREE.Mesh(new THREE.BoxGeometry(segLen + 0.12, groundFloorH, 0.24), baseMat);
+      baseBand.position.set((p1.x + p2.x) / 2, groundFloorH / 2, (p1.z + p2.z) / 2);
+      baseBand.rotation.y = -Math.atan2(dz, dx);
+      baseBand.castShadow = true;
+      baseBand.receiveShadow = true;
+      buildingGroup.add(baseBand);
+    }
+
+    // فواصل أفقية بين الأدوار
+    for (let f = 1; f < floorsCount; f++) {
+      const ySlab = f * floorH;
+      for (let i = 0; i < ptsXZ.length; i++) {
+        const p1 = ptsXZ[i];
+        const p2 = ptsXZ[(i + 1) % ptsXZ.length];
+        const dx = p2.x - p1.x;
+        const dz = p2.z - p1.z;
+        const segLen = Math.hypot(dx, dz);
+        if (segLen < 0.5) continue;
+
+        const slabGeo = new THREE.BoxGeometry(segLen + 0.16, 0.24, 0.36);
+        const slab = new THREE.Mesh(slabGeo, slabMat);
+        slab.position.set((p1.x + p2.x) / 2, ySlab, (p1.z + p2.z) / 2);
+        slab.rotation.y = -Math.atan2(dz, dx);
+        slab.castShadow = true;
+        slab.receiveShadow = true;
+        buildingGroup.add(slab);
+      }
+    }
+
+    // دروة سطح (Parapet) أعلى المبنى حول المحيط
+    for (let i = 0; i < ptsXZ.length; i++) {
+      const p1 = ptsXZ[i];
+      const p2 = ptsXZ[(i + 1) % ptsXZ.length];
+      const dx = p2.x - p1.x;
+      const dz = p2.z - p1.z;
+      const segLen = Math.hypot(dx, dz);
+      if (segLen < 0.4) continue;
+
+      const paraGeo = new THREE.BoxGeometry(segLen + 0.22, 0.65, 0.28);
+      const para = new THREE.Mesh(paraGeo, parapetMat);
+      para.position.set((p1.x + p2.x) / 2, heightM + 0.325, (p1.z + p2.z) / 2);
+      para.rotation.y = -Math.atan2(dz, dx);
+      para.castShadow = true;
+      para.receiveShadow = true;
+      buildingGroup.add(para);
+    }
+
+    // شبابيك وبلكونات على الأدوار
+    for (let f = 0; f < floorsCount; f++) {
+      const winCenterY = f * floorH + floorH * 0.55;
+      const winH = Math.min(1.25, floorH * 0.42);
+      const winW = 1.22;
+      const spacing = 2.8;
+
+      for (let i = 0; i < ptsXZ.length; i++) {
+        const p1 = ptsXZ[i];
+        const p2 = ptsXZ[(i + 1) % ptsXZ.length];
+        const dx = p2.x - p1.x;
+        const dz = p2.z - p1.z;
+        const segLen = Math.hypot(dx, dz);
+        if (segLen < spacing) continue;
+
+        const ux = dx / segLen;
+        const uz = dz / segLen;
+        const nx = uz;
+        const nz = -ux;
+        const yaw = -Math.atan2(dz, dx);
+
+        // إضافة بلكونة بارزة في الأدوار العليا على الضلع المناسب
+        if (f >= 1 && segLen >= 6.5 && i % 2 === 0) {
+          const midX = (p1.x + p2.x) / 2 + nx * 0.55;
+          const midZ = (p1.z + p2.z) / 2 + nz * 0.55;
+          const balcW = Math.min(3.2, segLen * 0.36);
+
+          const balcGroup = new THREE.Group();
+          const deck = new THREE.Mesh(new THREE.BoxGeometry(balcW, 0.2, 1.15), slabMat);
+          deck.castShadow = true;
+          deck.receiveShadow = true;
+          balcGroup.add(deck);
+
+          const rail = new THREE.Mesh(new THREE.BoxGeometry(balcW + 0.06, 0.88, 0.08), balconyMat);
+          rail.position.set(0, 0.52, 0.52);
+          rail.castShadow = true;
+          balcGroup.add(rail);
+
+          balcGroup.position.set(midX, f * floorH + 0.1, midZ);
+          balcGroup.rotation.y = yaw;
+          buildingGroup.add(balcGroup);
+        }
+
+        const count = Math.floor((segLen - 1.2) / spacing);
+        for (let k = 0; k < count; k++) {
+          const distAlong = (segLen - (count - 1) * spacing) / 2 + k * spacing;
+          const wx = p1.x + ux * distAlong + nx * 0.05;
+          const wz = p1.z + uz * distAlong + nz * 0.05;
+
+          const winGroup = new THREE.Group();
+
+          const outerFrame = new THREE.Mesh(new THREE.BoxGeometry(winW + 0.14, winH + 0.14, 0.12), frameMat);
+          outerFrame.castShadow = true;
+          winGroup.add(outerFrame);
+
+          const glass = new THREE.Mesh(new THREE.BoxGeometry(winW, winH, 0.14), windowGlassMat);
+          winGroup.add(glass);
+
+          const sill = new THREE.Mesh(new THREE.BoxGeometry(winW + 0.26, 0.11, 0.28), frameMat);
+          sill.position.set(0, -winH / 2 - 0.06, 0.05);
+          sill.castShadow = true;
+          winGroup.add(sill);
+
+          winGroup.position.set(wx, winCenterY, wz);
+          winGroup.rotation.y = yaw;
+          buildingGroup.add(winGroup);
+        }
+      }
+    }
+  }
+
+  window.rebuild3DScene = function() {
+    if (!initialized3D) init3DEngine();
+    while (buildingGroup.children.length > 0) {
+      const child = buildingGroup.children[0];
+      if (child.geometry) child.geometry.dispose();
+      buildingGroup.remove(child);
+    }
+
+    const { wallTex, pvTex } = createProceduralTextures();
+
+    const surfaces = [];
+    const cutouts = [];
+    drawnItems.eachLayer(layer => {
+      const gj = layer.toGeoJSON();
+      if (gj.geometry.type !== 'Polygon') return;
+      const sType = layer.shapeType || 'surface';
+      if (sType === 'cutout') cutouts.push(gj);
+      else surfaces.push(gj);
+    });
+
+    const floorsCount = Math.max(1, parseInt(document.getElementById('floorsCount').value, 10) || 4);
+    const heightM = Math.max(3, parseFloat(document.getElementById('buildingHeight').value) || 13);
+    const tiltDeg = Math.max(5, Math.min(45, parseFloat(document.getElementById('panelTilt').value) || 25));
+    const tiltRad = (tiltDeg * Math.PI) / 180;
+    const bColorHex = document.getElementById('buildingColor').value || '#e2e8f0';
+
+    const wallCol = new THREE.Color(bColorHex);
+    const roofCol = wallCol.clone().offsetHSL(0, -0.05, -0.06);
+    const slabCol = wallCol.clone().multiplyScalar(0.76);
+    const baseCol = wallCol.clone().multiplyScalar(0.64);
+    const frameCol = wallCol.clone().multiplyScalar(0.42);
+
+    const wallMat = new THREE.MeshStandardMaterial({ color: wallCol, map: wallTex, roughness: 0.72, metalness: 0.05 });
+    const roofMat = new THREE.MeshStandardMaterial({ color: roofCol, map: wallTex, roughness: 0.82, metalness: 0.04 });
+    const slabMat = new THREE.MeshStandardMaterial({ color: slabCol, roughness: 0.68, metalness: 0.12 });
+    const baseMat = new THREE.MeshStandardMaterial({ color: baseCol, map: wallTex, roughness: 0.78, metalness: 0.06 });
+    const parapetMat = new THREE.MeshStandardMaterial({ color: wallCol.clone().multiplyScalar(0.88), map: wallTex, roughness: 0.75, metalness: 0.06 });
+    const frameMat = new THREE.MeshStandardMaterial({ color: frameCol, roughness: 0.5, metalness: 0.35 });
+    const balconyMat = new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.5, metalness: 0.45 });
+    const windowGlassMat = new THREE.MeshStandardMaterial({ color: 0x0c4a6e, metalness: 0.88, roughness: 0.1 });
+    const cutoutMat = new THREE.MeshStandardMaterial({ color: 0xb91c1c, roughness: 0.65 });
+
+    if (surfaces.length === 0) {
+      const demoW = 24, demoD = 16;
+      const demoGeo = new THREE.BoxGeometry(demoW, heightM, demoD);
+      const demoMats = [wallMat, wallMat, roofMat, wallMat, wallMat, wallMat];
+      const demoMesh = new THREE.Mesh(demoGeo, demoMats);
+      demoMesh.position.y = heightM / 2;
+      demoMesh.castShadow = true;
+      demoMesh.receiveShadow = true;
+      buildingGroup.add(demoMesh);
+
+      const demoPts = [
+        { x: -demoW / 2, z: -demoD / 2 },
+        { x: demoW / 2, z: -demoD / 2 },
+        { x: demoW / 2, z: demoD / 2 },
+        { x: -demoW / 2, z: demoD / 2 }
+      ];
+      addArchitecturalDetails(demoPts, heightM, floorsCount, baseMat, slabMat, windowGlassMat, frameMat, balconyMat, parapetMat);
+
+      for (let x = -9; x <= 9; x += 2.65) {
+        for (let z = -5.5; z <= 5.5; z += 2.25) {
+          if (!isPanelCompletelyInsidePolygon(x, z, tiltRad, demoPts, 0.7)) continue;
+          const p = createSolarPanelMesh(tiltRad, pvTex);
+          p.position.set(x, heightM + 0.38, z);
+          buildingGroup.add(p);
+        }
+      }
+      controls3D.target.set(0, heightM / 2, 0);
+      camera3D.position.set(34, heightM + 24, 36);
+      return;
+    }
+
+    const fc = turf.featureCollection(surfaces);
+    const centerPt = turf.center(fc).geometry.coordinates;
+    const cLon = centerPt[0], cLat = centerPt[1];
+    const mPerDegLat = 111132.92;
+    const mPerDegLon = 111412.84 * Math.cos((cLat * Math.PI) / 180);
+
+    function toLocalXZ(coord) {
+      return {
+        x: (coord[0] - cLon) * mPerDegLon,
+        z: -(coord[1] - cLat) * mPerDegLat
+      };
+    }
+
+    const cutoutPolysXZ = cutouts.map(c => c.geometry.coordinates[0].map(toLocalXZ));
+    let maxSpan = 20;
+
+    surfaces.forEach(surf => {
+      let ring = surf.geometry.coordinates[0].slice();
+      if (ring.length > 1 && ring[0][0] === ring[ring.length - 1][0] && ring[0][1] === ring[ring.length - 1][1]) {
+        ring.pop();
+      }
+      let ptsXZ = ring.map(toLocalXZ);
+      if (ptsXZ.length < 3) return;
+
+      const shapePts = ptsXZ.map(p => new THREE.Vector2(p.x, -p.z));
+      if (THREE.ShapeUtils.isClockWise(shapePts)) {
+        shapePts.reverse();
+      }
+
+      const shape = new THREE.Shape(shapePts);
+
+      cutoutPolysXZ.forEach(cPoly => {
+        const cClean = cPoly.slice();
+        if (cClean.length > 1 && cClean[0].x === cClean[cClean.length - 1].x && cClean[0].z === cClean[cClean.length - 1].z) {
+          cClean.pop();
+        }
+        const holePts = cClean.map(p => new THREE.Vector2(p.x, -p.z));
+        if (!THREE.ShapeUtils.isClockWise(holePts)) {
+          holePts.reverse();
+        }
+        if (holePts.length >= 3) {
+          shape.holes.push(new THREE.Path(holePts));
+        }
+      });
+
+      const extrudeGeo = new THREE.ExtrudeGeometry(shape, {
+        depth: heightM,
+        bevelEnabled: true,
+        bevelSegments: 2,
+        steps: 1,
+        bevelSize: 0.1,
+        bevelThickness: 0.2
+      });
+      extrudeGeo.rotateX(-Math.PI / 2);
+
+      const mesh = new THREE.Mesh(extrudeGeo, [wallMat, roofMat]);
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      buildingGroup.add(mesh);
+
+      addArchitecturalDetails(ptsXZ, heightM, floorsCount, baseMat, slabMat, windowGlassMat, frameMat, balconyMat, parapetMat);
+
+      let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
+      ptsXZ.forEach(p => {
+        if (p.x < minX) minX = p.x;
+        if (p.x > maxX) maxX = p.x;
+        if (p.z < minZ) minZ = p.z;
+        if (p.z > maxZ) maxZ = p.z;
+      });
+      maxSpan = Math.max(maxSpan, maxX - minX, maxZ - minZ);
+
+      for (let x = minX + 1.2; x <= maxX - 1.2; x += 2.65) {
+        for (let z = minZ + 1.2; z <= maxZ - 1.2; z += 2.25) {
+          if (!isPanelCompletelyInsidePolygon(x, z, tiltRad, ptsXZ, 0.85)) continue;
+          const inCutout = cutoutPolysXZ.some(cp => pointInPolygon2D(x, z, cp));
+          if (inCutout) continue;
+
+          const pMesh = createSolarPanelMesh(tiltRad, pvTex);
+          pMesh.position.set(x, heightM + 0.42, z);
+          buildingGroup.add(pMesh);
+        }
+      }
+    });
+
+    cutoutPolysXZ.forEach(cPoly => {
+      const cClean = cPoly.slice();
+      if (cClean.length > 1 && cClean[0].x === cClean[cClean.length - 1].x && cClean[0].z === cClean[cClean.length - 1].z) {
+        cClean.pop();
+      }
+      const cPts = cClean.map(p => new THREE.Vector2(p.x, -p.z));
+      if (cPts.length < 3) return;
+      const cShape = new THREE.Shape(cPts);
+      const cGeo = new THREE.ShapeGeometry(cShape);
+      cGeo.rotateX(-Math.PI / 2);
+      const cMesh = new THREE.Mesh(cGeo, cutoutMat);
+      cMesh.position.y = heightM - 0.55;
+      buildingGroup.add(cMesh);
+    });
+
+    controls3D.target.set(0, heightM / 2, 0);
+    const dist = Math.max(30, maxSpan * 1.15);
+    camera3D.position.set(dist, heightM + dist * 0.65, dist);
+  };
+
+  window.switchView = function(mode) {
+    currentView = mode;
+    const mapEl = document.getElementById('map');
+    const v3dEl = document.getElementById('view3d');
+    const t2d = document.getElementById('tab2D');
+    const t3d = document.getElementById('tab3D');
+
+    if (mode === '3d') {
+      mapEl.style.display = 'none';
+      v3dEl.style.display = 'block';
+      t2d.classList.remove('active');
+      t3d.classList.add('active');
+      init3DEngine();
+      const nw = v3dEl.clientWidth;
+      const nh = v3dEl.clientHeight;
+      if (nw > 0 && nh > 0) {
+        camera3D.aspect = nw / nh;
+        camera3D.updateProjectionMatrix();
+        renderer3D.setSize(nw, nh);
+      }
+      rebuild3DScene();
+    } else {
+      v3dEl.style.display = 'none';
+      mapEl.style.display = 'block';
+      t3d.classList.remove('active');
+      t2d.classList.add('active');
+      setTimeout(() => map.invalidateSize(), 120);
+    }
+  };
+
+  // ==================== البحث وتصدير GeoJSON ====================
+  function setStatus(msg, isError) {
+    const el = document.getElementById('searchStatus');
+    el.style.color = isError ? '#dc2626' : '#0f4c81';
+    el.innerText = msg || '';
+  }
+
+  function goToCoords(lat, lon, label, zoomLevel = 20, pshVal = null) {
+    switchView('2d');
+    if (pshVal) {
+      document.getElementById('pshSelect').value = pshVal;
+      recalcAll();
+    }
+    map.setView([lat, lon], zoomLevel);
+    if (searchMarker) map.removeLayer(searchMarker);
+    searchMarker = L.marker([lat, lon]).addTo(map).bindPopup(label || `${lat.toFixed(5)}, ${lon.toFixed(5)}`).openPopup();
+    document.getElementById('suggestions').style.display = 'none';
+    setStatus(`تم الانتقال إلى: ${label || ''}`);
+  }
+
+  function parseCoordinates(text) {
+    const match = text.trim().match(/^(-?\d{1,2}\.\d+|-?\d{1,2})\s*[,\s]+\s*(-?\d{1,3}\.\d+|-?\d{1,3})$/);
+    if (!match) return null;
+    const lat = parseFloat(match[1]);
+    const lon = parseFloat(match[2]);
+    return (lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180) ? { lat, lon } : null;
+  }
+
+  window.openInGoogleMaps = function() {
+    const q = document.getElementById('searchInput').value.trim();
+    const c = map.getCenter();
+    const url = q
+      ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}`
+      : `https://www.google.com/maps/@${c.lat.toFixed(6)},${c.lng.toFixed(6)},20z`;
+    window.open(url, '_blank');
+  };
+
+  function searchLocalFaculties(query) {
+    const normQ = normalizeArabic(query);
+    const tokens = normQ.split(' ').filter(Boolean);
+    if (tokens.length === 0) return [];
+
+    if (tokens.includes('اداب') && tokens.includes('بنها')) {
+      const exact = LOCAL_FACULTIES.find(f => f.name.includes('كلية الآداب - جامعة بنها'));
+      if (exact) return [{ name: exact.name, lat: exact.lat, lon: exact.lon, psh: exact.psh, isLocal: true }];
+    }
+
+    return LOCAL_FACULTIES
+      .filter(f => {
+        const keyStr = Array.isArray(f.keys) ? f.keys.join(' ') : (f.keys || '');
+        const hay = normalizeArabic(`${f.name} ${keyStr}`);
+        return tokens.every(tok => hay.includes(tok));
+      })
+      .map(f => ({ name: f.name, lat: f.lat, lon: f.lon, psh: f.psh, isLocal: true }));
+  }
+
+  async function fetchExternalPlaces(query, signal) {
+    let results = [];
+    const qWithEgypt = /بنها|القاهره|القاهرة|اسكندريه|الإسكندرية|منصوره|المنصورة|اسيوط|أسيوط|طنطا|زقازيق|الزقازيق/i.test(query)
+      ? `${query} مصر`
+      : query;
+
+    try {
+      const rArc = await fetch(`https://geocode.arcgis.com/arcgis/rest/services/World/GeocodeServer/findAddressCandidates?f=json&maxLocations=6&SingleLine=${encodeURIComponent(qWithEgypt)}`, { signal });
+      if (rArc.ok) {
+        const dArc = await rArc.json();
+        results = (dArc.candidates || []).map(c => ({ name: c.address, lat: c.location.y, lon: c.location.x }));
+      }
+    } catch (e) {
+      if (e.name === 'AbortError') return [];
+    }
+
+    if (results.length === 0) {
+      try {
+        const rNom = await fetch(`https://nominatim.openstreetmap.org/search?format=json&accept-language=ar,en&limit=6&q=${encodeURIComponent(qWithEgypt)}`, { signal });
+        if (rNom.ok) {
+          const dNom = await rNom.json();
+          results = dNom.map(item => ({ name: item.display_name, lat: parseFloat(item.lat), lon: parseFloat(item.lon) }));
+        }
+      } catch (e) {
+        if (e.name === 'AbortError') return [];
+      }
+    }
+
+    if (results.length === 0) {
+      try {
+        const rPh = await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(qWithEgypt)}&limit=6`, { signal });
+        if (rPh.ok) {
+          const dPh = await rPh.json();
+          results = (dPh.features || []).map(f => {
+            const p = f.properties || {};
+            return { name: [p.name, p.city, p.state, p.country].filter(Boolean).join(" - ") || "موقع مختار", lat: f.geometry.coordinates[1], lon: f.geometry.coordinates[0] };
+          });
+        }
+      } catch (e) {}
+    }
+
+    return results;
+  }
+
+  function renderSuggestions(list) {
+    const box = document.getElementById('suggestions');
+    if (!list || list.length === 0) {
+      box.style.display = 'none';
+      return;
+    }
+    box.innerHTML = list.map(p => {
+      const safeName = p.name.replace(/'/g, "").replace(/"/g, "");
+      const pshArg = p.psh ? `'${p.psh}'` : 'null';
+      const badge = p.isLocal ? `<span class="badge-local">كلية/جامعة</span>` : '';
+      return `<div class="suggestion-item" onclick="goToCoords(${p.lat}, ${p.lon}, '${safeName}', 20, ${pshArg})">${badge}${p.name}<span class="suggestion-sub">${Number(p.lat).toFixed(5)}, ${Number(p.lon).toFixed(5)}</span></div>`;
+    }).join('');
+    box.style.display = 'block';
+  }
+
+  function onSearchInput() {
+    const val = document.getElementById('searchInput').value.trim();
+    const box = document.getElementById('suggestions');
+    clearTimeout(debounceTimer);
+    if (searchAbortController) searchAbortController.abort();
+    setStatus('');
+
+    if (val.length < 2) { box.style.display = 'none'; return; }
+
+    const coords = parseCoordinates(val);
+    if (coords) {
+      box.innerHTML = `<div class="suggestion-item" onclick="goToCoords(${coords.lat}, ${coords.lon}, 'إحداثيات: ${coords.lat}, ${coords.lon}')">الانتقال إلى الإحداثيات: <b>${coords.lat}, ${coords.lon}</b></div>`;
+      box.style.display = 'block';
+      return;
+    }
+
+    const localMatches = searchLocalFaculties(val);
+    if (localMatches.length > 0) {
+      renderSuggestions(localMatches);
+      return;
+    }
+
+    searchAbortController = new AbortController();
+    const signal = searchAbortController.signal;
+
+    debounceTimer = setTimeout(async () => {
+      setStatus('جاري البحث...');
+      const extMatches = await fetchExternalPlaces(val, signal);
+      if (signal.aborted) return;
+      if (extMatches.length === 0) {
+        box.style.display = 'none';
+        setStatus('لا توجد نتائج، جرب زر Google Maps أو الصق الإحداثيات.', true);
+        return;
+      }
+      setStatus('');
+      renderSuggestions(extMatches.slice(0, 7));
+    }, 220);
+  }
+
+  async function searchLocation() {
+    const query = document.getElementById('searchInput').value.trim();
+    if (!query) { setStatus('اكتب اسم كلية أو مدينة أو شارع أو إحداثيات أولاً.', true); return; }
+
+    const coords = parseCoordinates(query);
+    if (coords) { goToCoords(coords.lat, coords.lon, `إحداثيات: ${coords.lat}, ${coords.lon}`); return; }
+
+    const localMatches = searchLocalFaculties(query);
+    if (localMatches.length > 0) {
+      goToCoords(localMatches[0].lat, localMatches[0].lon, localMatches[0].name, 20, localMatches[0].psh);
+      return;
+    }
+
+    if (searchAbortController) searchAbortController.abort();
+    searchAbortController = new AbortController();
+    setStatus('جاري البحث...');
+    const places = await fetchExternalPlaces(query, searchAbortController.signal);
+    if (places.length > 0) goToCoords(places[0].lat, places[0].lon, places[0].name, 20, null);
+    else setStatus('لم يتم العثور على نتيجة. جرّب زر Google Maps أو الصق الإحداثيات.', true);
+  }
+
+  document.addEventListener('click', function(e) {
+    if (!e.target.closest('.search-wrapper')) {
+      document.getElementById('suggestions').style.display = 'none';
+    }
+  });
+
   function downloadGeoJSON() {
-    if (!lastGeoJSON) { alert("ارسم مبنى على الخريطة أولاً"); return; }
-    const blob = new Blob([JSON.stringify(lastGeoJSON, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
+    const layers = drawnItems.getLayers();
+    if (layers.length === 0) { alert("ارسم شكلاً واحداً على الأقل على الخريطة أولاً"); return; }
+
+    const ratio = (parseFloat(document.getElementById('usablePct').value) || 75) / 100;
+    const psh = parseFloat(document.getElementById('pshSelect').value) || 5.4;
+    const pr = parseFloat(document.getElementById('prInput').value) || 0.78;
+    const floorsCount = parseInt(document.getElementById('floorsCount').value, 10) || 4;
+    const heightM = parseFloat(document.getElementById('buildingHeight').value) || 13;
+    const tiltDeg = parseFloat(document.getElementById('panelTilt').value) || 25;
+    const bColorHex = document.getElementById('buildingColor').value || '#e2e8f0';
+
+    const features = layers.map(layer => {
+      const gj = layer.toGeoJSON();
+      gj.properties = gj.properties || {};
+      const sType = layer.shapeType || (gj.geometry.type === 'LineString' ? 'line' : 'surface');
+      gj.properties.Feature_Type = sType;
+
+      if (sType === 'cutout' && typeof turf !== 'undefined') {
+        gj.properties.Cutout_Area_SqM = Number(turf.area(gj).toFixed(2));
+      } else if (sType === 'surface' && typeof turf !== 'undefined') {
+        const area = turf.area(gj);
+        const netA = area * ratio;
+        const panels = Math.floor(netA / 2.57);
+        const kwp = (panels * 550) / 1000;
+        gj.properties.Area_SqM = Number(area.toFixed(2));
+        gj.properties.Usable_Area_SqM = Number(netA.toFixed(2));
+        gj.properties.Floors = floorsCount;
+        gj.properties.Building_Height_M = heightM;
+        gj.properties.Panel_Tilt_Deg = tiltDeg;
+        gj.properties.Building_Color = bColorHex;
+        gj.properties.Panels = panels;
+        gj.properties.kWp = Number(kwp.toFixed(2));
+        gj.properties.Monthly_kWh = Math.round(kwp * psh * 30 * pr);
+        gj.properties.Annual_kWh = Math.round(kwp * psh * 365 * pr);
+      } else if (sType === 'line' && typeof turf !== 'undefined') {
+        gj.properties.Length_Meters = Number((turf.length(gj, { units: 'kilometers' }) * 1000).toFixed(2));
+      }
+      return gj;
+    });
+
+    const blob = new Blob([JSON.stringify({ type: "FeatureCollection", features: features }, null, 2)], { type: "application/json" });
     const a = document.createElement("a");
-    a.href = url;
-    a.download = "building_solar.geojson";
+    a.href = URL.createObjectURL(blob);
+    a.download = "solar_gis_3d_final.geojson";
     a.click();
   }
 </script>
